@@ -1,15 +1,16 @@
-from std.sys.info import simd_width_of
+from std.sys.info import simd_width_of as simdwidthof
 
 
 comptime I64Ptr = Pointer[Int64, AnyOrigin[mut=True]]
-comptime W = simd_width_of[DType.int64]()
+comptime W = simdwidthof[DType.int64]()
 
 
+@always_inline
 def rows_differ(keys: I64Ptr, row: Int, columns: Int) -> Bool:
     var base = row * columns
     var previous = base - columns
     var column = 0
-    if columns >= W * 2:
+    if columns >= W:
         while column + W <= columns:
             var current_values = keys.unsafe_load[width=W](base + column)
             var previous_values = keys.unsafe_load[width=W](previous + column)

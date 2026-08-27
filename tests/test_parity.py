@@ -213,8 +213,15 @@ def test_numeric_kernel_simd_tail():
     assert coalesce_indices(keys).tolist() == [0, 3, 5, 10, 11]
 
 
+def test_numeric_kernel_single_simd_vector_and_tail():
+    keys = np.zeros((7, 6), dtype=np.int64)
+    keys[2:6, 0] = 1
+    keys[4:6, 5] = 2
+    assert coalesce_indices(keys).tolist() == [0, 2, 4, 6]
+
+
 @pytest.mark.parametrize("rows", [999_999, 1_000_003])
-def test_numeric_kernel_parallel_threshold(rows):
+def test_numeric_kernel_large_input(rows):
     keys = np.zeros((rows, 6), dtype=np.int64)
     keys[500_001:500_003] = 1
     keys[-1] = 2
@@ -261,6 +268,8 @@ def test_batch_preserves_instances_and_distinguishes_all_fields():
 
 def test_batch_validates_events_and_previous():
     event = events.FileModifiedEvent("/x")
+    with pytest.raises(TypeError, match="FileSystemEvent"):
+        coalesce_events([object()])
     with pytest.raises(TypeError, match="FileSystemEvent"):
         coalesce_events([event, object()])
     with pytest.raises(TypeError, match="FileSystemEvent"):

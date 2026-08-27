@@ -77,13 +77,20 @@ def coalesce_events(
         raise TypeError("coalesce_events accepts FileSystemEvent instances")
     if not events:
         return []
-    result = []
+    iterator = iter(events)
+    result: list[FileSystemEvent] = []
+    append = result.append
     last = previous
-    for event in events:
+    if last is None:
+        last = next(iterator)
+        if not isinstance(last, FileSystemEvent):
+            raise TypeError("coalesce_events accepts FileSystemEvent instances")
+        append(last)
+    for event in iterator:
         if not isinstance(event, FileSystemEvent):
             raise TypeError("coalesce_events accepts FileSystemEvent instances")
-        if last is None or event != last:
-            result.append(event)
+        if event != last:
+            append(event)
         last = event
     return result
 

@@ -7,7 +7,7 @@ It removes repeated adjacent events before a consumer has to dispatch them.
 The covered queue and event APIs match the upstream version pinned in
 `pixi.lock`. For large event bursts, `coalesce_events` compares adjacent Python
 event values directly in one pass. Backends that already represent events as
-integer fields can use `coalesce_indices` for a SIMD and multicore Mojo scan.
+integer fields can use `coalesce_indices` for a SIMD Mojo scan.
 
 ## Covered subset
 
@@ -89,8 +89,8 @@ Parity tests run against the real watchdog package pinned in `pixi.lock`. They c
 constructor signatures, fields, representations, hashes, queue results and
 capacity behavior, `ObservedWatch`, handler dispatch, randomized batches, and
 cross-batch state. The numeric kernel is checked against a NumPy reference over
-multiple shapes, including SIMD remainders and both sides of the parallel
-threshold.
+multiple shapes, including single-vector rows, SIMD remainders, and large
+inputs.
 
 ```bash
 pixi run test
@@ -103,12 +103,15 @@ Fresh output from `pixi run bench` on this machine (Intel Xeon E5-2697 v4 at
 
 | case | mojo-watchdog | reference | speedup |
 | --- | ---: | ---: | ---: |
-| dense int64 keys, 5M x 6 | 35.53 ms | 192.30 ms (NumPy adjacent-row scan) | 5.41x faster |
-| event objects, 250k | 120.82 ms | 235.66 ms (`watchdog.EventQueue`) | 1.95x faster |
+| dense int64 keys, 5M x 6 | 37.43 ms | 133.07 ms (NumPy adjacent-row scan) | 3.55x faster |
+| event objects, 250k | 113.95 ms | 242.10 ms (`watchdog.EventQueue`) | 2.12x faster |
 
 The object path avoids temporary dense-key matrices and dictionary interning,
 so it is faster in this run than feeding the same burst through
-`watchdog.EventQueue`. There is no GPU path.
+`watchdog.EventQueue`. The numeric scan performs at most one integer comparison
+per 16 bytes read, far below the roughly 2-flop/byte threshold for useful GPU
+offload, so there is no GPU path. A parallel CPU prototype was also slower at
+both 5M and 10M rows because its required compaction pass adds memory traffic.
 
 The benchmark uses repeated wall-time measurements after loading the library
 and asserts that both implementations produce identical indices or event
@@ -123,10 +126,9 @@ pixi run bench
 The Mojo kernel receives a C-contiguous `int64` matrix with one event per row
 and one equality field per column. It compares each row with its immediate
 predecessor and writes the starting index of each distinct run into a
-caller-owned `int64` output buffer. Narrow rows retain scalar early exit. Wider
-rows use native-width SIMD loads and a scalar remainder. Large inputs are split
-into independent row chunks with synchronous CPU parallelism, then compacted
-in place using the output buffer as scratch.
+caller-owned `int64` output buffer. Rows at least one native vector wide use
+native-width SIMD loads and a scalar remainder; narrower rows retain scalar
+early exit.
 
 Python event objects use a direct adjacent-value scan, avoiding the former
 temporary NumPy matrix, six dictionary lookups per event, and result-index
